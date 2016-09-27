@@ -11,7 +11,7 @@
 
 #define SELECT_MODE_PIN     4
 #define RELEASE_PIN         5
-#define LEDSTS_PIN          8
+#define LEDSTS_PIN          2
 
 #define DEBOUNCE_TIME       5
 
@@ -19,7 +19,7 @@
 Timer procTimer;
 Timer procTimer2;
 Timer procTimer3;
-HttpClient sjCam;
+Timer ledProcess;
 
 Bounce modeBtnBouncer    = Bounce(SELECT_MODE_PIN, DEBOUNCE_TIME);
 Bounce releaseBtnBouncer = Bounce(RELEASE_PIN, DEBOUNCE_TIME);
@@ -64,9 +64,15 @@ public :
 
     SJCamMode_t getCurrentMode () { return currentMode; }
     void setCurrentMode (SJCamMode_t mode) { currentMode = mode; }
+    bool isVideoRecording () { return videoRecording; }
 
     void sendCommand (SJCamCommand_t cmd)
     {
+        if (cmd == CMD_START_REC_VIDEO)
+            videoRecording = true;
+        else
+            videoRecording = false;
+
         if (client.isProcessing())
             return;
 
@@ -78,8 +84,10 @@ public :
 private :
     HttpClient client;
     SJCamMode_t currentMode = MODE_VIDEO;
+    bool videoRecording = false;
 
-    static void onSentResponse(HttpClient& client, bool successful) {
+    static void onSentResponse(HttpClient& client, bool successful)
+    {
         if (successful)
             Serial.println("Success sent command");
         else
@@ -87,7 +95,6 @@ private :
     }
 };
 
-bool isVideoRecording = false;
 SJCamRemote sjcam;
 
 void processModeBtn()
@@ -99,7 +106,7 @@ void processModeBtn()
         sjcam.setCurrentMode (MODE_VIDEO);
     }
     else if (sjcam.getCurrentMode() == MODE_VIDEO) {
-        if (isVideoRecording) {
+        if (sjcam.isVideoRecording()) {
             sjcam.sendCommand (CMD_STOP_REC_VIDEO);
         }
 
@@ -114,10 +121,11 @@ void processReleaseBtn()
     Serial.println(__func__);
     if (sjcam.getCurrentMode() == MODE_PHOTO) {
         Serial.println("CMD_TAKE_A_PHOTO");
+        digitalWrite(LEDSTS_PIN, 0);
         sjcam.sendCommand (CMD_TAKE_A_PHOTO);
     }
     else if (sjcam.getCurrentMode() == MODE_VIDEO) {
-        if (!isVideoRecording) {
+        if (!sjcam.isVideoRecording()) {
             Serial.println("CMD_START_REC_VIDEO");
             sjcam.sendCommand (CMD_START_REC_VIDEO);
         }
@@ -138,7 +146,24 @@ void processButton()
 
     if (releaseBtnBouncer.update()) {
         if (releaseBtnBouncer.read() == HIGH) {
-            procTimer.initializeMs(1, processReleaseBtn).start(false);
+            procTimer2.initializeMs(1, processReleaseBtn).start(false);
+        }
+    }
+}
+
+void ledStsProcess()
+{
+    if (sjcam.getCurrentMode() == MODE_PHOTO) {
+        digitalWrite(LEDSTS_PIN, 1);
+    }
+    else if (sjcam.getCurrentMode() == MODE_VIDEO) {
+        if (sjcam.isVideoRecording()) {
+            static bool ledSts = false;
+            digitalWrite(LEDSTS_PIN, ledSts);
+            ledSts = !ledSts;
+        }
+        else {
+            digitalWrite(LEDSTS_PIN, 1);
         }
     }
 }
@@ -146,6 +171,7 @@ void processButton()
 void connectOk()
 {
     Serial.println("CONNECTED");
+    procTimer3.initializeMs(50, processButton).start();
 }
 
 void connectFail()
@@ -163,9 +189,11 @@ void init()
 
     /* Button init */
     pinMode(SELECT_MODE_PIN,INPUT);
-    pinMode(RELEASE_PIN,OUTPUT);
+    pinMode(RELEASE_PIN,INPUT);
 
-    procTimer3.initializeMs(50, processButton).start();
+    /* LED init */
+    pinMode(LEDSTS_PIN,OUTPUT);
+    digitalWrite(LEDSTS_PIN, 0);
 
     /* Start Wifi */
     WifiStation.config(WIFI_SSID, WIFI_PWD);
@@ -173,4 +201,5 @@ void init()
     WifiAccessPoint.enable(false);
 
     WifiStation.waitConnection(connectOk, WIFI_CONN_TIMEOUT, connectFail);
+    ledProcess.initializeMs(1000, ledStsProcess).start();
 }
