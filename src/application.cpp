@@ -153,6 +153,11 @@ void processButton()
 
 void ledStsProcess()
 {
+	if (!WifiStation.isConnected()) {
+        digitalWrite(LEDSTS_PIN, 0);
+		return;
+	}
+
     if (sjcam.getCurrentMode() == MODE_PHOTO) {
         digitalWrite(LEDSTS_PIN, 1);
     }
@@ -201,5 +206,5 @@ void init()
     WifiAccessPoint.enable(false);
 
     WifiStation.waitConnection(connectOk, WIFI_CONN_TIMEOUT, connectFail);
-    ledProcess.initializeMs(1000, ledStsProcess).start();
+    ledProcess.initializeMs(500, ledStsProcess).start();
 }
