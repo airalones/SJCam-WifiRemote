@@ -153,9 +153,20 @@ void processButton()
 
 void ledStsProcess()
 {
+    static bool firstConnected = true;
+
 	if (!WifiStation.isConnected()) {
+	    firstConnected = true;
+	    ledProcess.setIntervalMs(50);
         digitalWrite(LEDSTS_PIN, 0);
 		return;
+	} else {
+        ledProcess.setIntervalMs(1000);
+        if (firstConnected) {
+            sjcam.setCurrentMode(MODE_VIDEO);
+            procTimer3.initializeMs(50, processButton).start();
+            firstConnected = false;
+        }
 	}
 
     if (sjcam.getCurrentMode() == MODE_PHOTO) {
@@ -176,7 +187,6 @@ void ledStsProcess()
 void connectOk()
 {
     Serial.println("CONNECTED");
-    procTimer3.initializeMs(50, processButton).start();
 }
 
 void connectFail()
@@ -206,5 +216,5 @@ void init()
     WifiAccessPoint.enable(false);
 
     WifiStation.waitConnection(connectOk, WIFI_CONN_TIMEOUT, connectFail);
-    ledProcess.initializeMs(500, ledStsProcess).start();
+    ledProcess.initializeMs(50, ledStsProcess).start();
 }
